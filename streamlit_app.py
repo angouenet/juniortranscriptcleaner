@@ -1,6 +1,7 @@
 import io
 import re
 from typing import List, Set, Tuple
+import fitz  # PyMuPDF
 
 import streamlit as st
 
@@ -53,6 +54,55 @@ def detect_entities(text: str, nlp, labels=("PERSON", "ORG")) -> Set[str]:
 def redact_text(text: str, phrases: List[str], replacement: str) -> str:
     pat = build_phrase_regex(phrases)
     return pat.sub(replacement, text)
+
+def redact_pdf_bytes(
+    pdf_bytes: bytes,
+    phrases: List[str],
+    replacement_text: str = "[REDACTED]",
+) -> bytes:
+    """
+    True redaction: preserves original PDF layout, removes the text visually.
+    Note: This is based on text search; it requires selectable text (not scanned images).
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    # sort longest-first so full names get redacted before first names
+    phrases = [p for p in phrases if p and p.strip()]
+    phrases.sort(key=len, reverse=True)
+
+    # Optional: de-hyphenate search to catch line breaks like "Site-\nMinder"
+    search_flags = 0
+    if hasattr(fitz, "TEXT_DEHYPHENATE"):
+        search_flags |= fitz.TEXT_DEHYPHENATE
+
+    total_hits = 0
+
+    for page in doc:
+        for phrase in phrases:
+            # Case-insensitive search if available in your PyMuPDF version
+            flags = search_flags
+            if hasattr(fitz, "TEXT_IGNORECASE"):
+                flags |= fitz.TEXT_IGNORECASE
+
+            rects = page.search_for(phrase, flags=flags)
+
+            # If TEXT_IGNORECASE isn't available, you can optionally try a couple variants:
+            if not rects and not hasattr(fitz, "TEXT_IGNORECASE"):
+                rects = page.search_for(phrase.lower(), flags=search_flags) + page.search_for(
+                    phrase.upper(), flags=search_flags
+                )
+
+            for r in rects:
+                total_hits += 1
+                # Add a redaction annotation (filled box) and optional overlay text
+                page.add_redact_annot(r, text=replacement_text, fill=(0, 0, 0))
+
+        # Apply all redactions on the page
+        page.apply_redactions()
+
+    out = doc.tobytes(garbage=4, deflate=True)
+    doc.close()
+    return out
 
 # -------- UI --------
 uploaded = st.file_uploader("Upload or drag-and-drop a transcript PDF", type=["pdf"])
@@ -111,6 +161,20 @@ if mode.startswith("Auto-detect"):
 
 with st.spinner("Scrubbing..."):
     redacted_text = redact_text(full_text, targets, replacement.strip() or "[REDACTED]")
+
+with st.spinner("Generating redacted PDF (preserving layout)..."):
+    redacted_pdf = redact_pdf_bytes(
+        pdf_bytes=file_bytes,
+        phrases=targets,
+        replacement_text=replacement.strip() or "[REDACTED]",
+    )
+
+st.download_button(
+    "Download redacted PDF (original layout)",
+    data=redacted_pdf,
+    file_name="redacted_transcript.pdf",
+    mime="application/pdf",
+)
 
 # -------- display --------
 col1, col2 = st.columns(2)
