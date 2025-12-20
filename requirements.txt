@@ -1,13 +1,14 @@
-reportlab
+streamlit==1.52.2
 
-streamlit
-pdfplumber
-pymupdf
+# PDF
+pymupdf==1.26.7
+pdfplumber==0.11.8
 
-# Core pins to avoid binary/ABI mismatch on Streamlit Cloud
-numpy==1.26.4
-spacy==3.8.0
-thinc==8.3.0
+# spaCy (pin to avoid ABI issues)
+numpy==2.3.5
+spacy==3.8.11
+thinc==8.3.10
+blis==1.3.3
 
-# Install model wheel (so spacy.load("en_core_web_sm") works)
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# Model package (must be installed as a wheel)
+en-core-web-sm==3.8.0
