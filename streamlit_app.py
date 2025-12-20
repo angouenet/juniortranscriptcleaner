@@ -49,17 +49,22 @@ def build_phrase_regex(phrases: List[str]) -> re.Pattern:
     escaped = [re.escape(p) for p in phrases]
     # Case-insensitive, avoid matching inside words
     return re.compile(r"(?i)(?<!\w)(" + "|".join(escaped) + r")(?!\w)")
-
+    
 def detect_entities(text: str, nlp, labels=("PERSON", "ORG")) -> Set[str]:
     ents: Set[str] = set()
-    # If extremely long transcripts, you might chunk; keep simple for now
-    doc = nlp(text)
-    for ent in doc.ents:
-        if ent.label_ in labels:
-            v = ent.text.strip()
-            if v:
-                ents.add(v)
+
+    # Chunk to avoid very large-doc edge cases
+    chunk_size = 200_000  # chars
+    for i in range(0, len(text), chunk_size):
+        doc = nlp(text[i : i + chunk_size])
+        for ent in doc.ents:
+            if ent.label_ in labels:
+                v = ent.text.strip()
+                if v:
+                    ents.add(v)
+
     return ents
+
 
 def redact_text(text: str, phrases: List[str], replacement: str) -> str:
     pat = build_phrase_regex(phrases)
