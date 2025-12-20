@@ -17,7 +17,17 @@ st.title("Transcript PDF Scrubber")
 # -------- helpers --------
 @st.cache_resource
 def load_spacy_model():
-    return spacy.load("en_core_web_sm")
+    try:
+        return spacy.load("en_core_web_sm")
+    except Exception as e:
+        # Show a helpful error in the UI instead of crashing the app
+        st.error(
+            "Auto-detect requires the spaCy model `en_core_web_sm`, but it isn't available in this environment."
+        )
+        st.code("python -m spacy download en_core_web_sm")
+        st.caption(f"Details: {type(e).__name__}: {e}")
+        st.stop()
+
 
 def extract_pdf_text(file_bytes: bytes) -> Tuple[str, List[str]]:
     pages = []
